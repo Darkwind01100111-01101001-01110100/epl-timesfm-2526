@@ -1,0 +1,32 @@
+matchweek,date,venue,result,gf,ga,opponent,days_rest
+1,2025-08-17,Home,D,0,0,Crystal Palace,
+2,2025-08-22,Away,W,5,1,West Ham United,5
+3,2025-08-30,Home,W,2,0,Fulham,8
+4,2025-09-13,Away,D,2,2,Brentford,14
+5,2025-09-20,Away,L,1,2,Manchester Utd,7
+6,2025-09-27,Home,L,1,3,Brighton,7
+7,2025-10-04,Home,W,2,1,Liverpool,7
+8,2025-10-18,Away,W,3,0,Nottingham Forest,14
+9,2025-10-25,Home,L,1,2,Sunderland,7
+10,2025-11-01,Away,W,1,0,Tottenham Hotspur,7
+11,2025-11-08,Home,W,3,0,Wolves,7
+12,2025-11-22,Away,W,2,0,Burnley,14
+13,2025-11-30,Home,D,1,1,Arsenal,8
+14,2025-12-03,Away,L,1,3,Leeds United,3
+15,2025-12-06,Away,D,0,0,Bournemouth,3
+16,2025-12-13,Home,W,2,0,Everton,7
+17,2025-12-20,Away,D,2,2,Newcastle United,7
+18,2025-12-27,Home,L,1,2,Aston Villa,7
+19,2025-12-30,Home,D,2,2,Bournemouth,3
+20,2026-01-04,Away,D,1,1,Manchester City,5
+21,2026-01-07,Away,L,1,2,Fulham,3
+22,2026-01-17,Home,W,2,0,Brentford,10
+23,2026-01-25,Away,W,3,1,Crystal Palace,8
+24,2026-01-31,Home,W,3,2,West Ham United,6
+25,2026-02-07,Away,W,3,1,Wolves,7
+26,2026-02-10,Home,D,2,2,Leeds United,3
+27,2026-02-21,Home,D,1,1,Burnley,11
+28,2026-03-01,Away,L,1,2,Arsenal,8
+29,2026-03-04,Away,W,4,1,Aston Villa,3
+30,2026-03-14,Home,L,0,1,Newcastle United,10
+31,2026-03-21,Away,L,0,3,Everton,7
