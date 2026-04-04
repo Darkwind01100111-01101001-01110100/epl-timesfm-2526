@@ -1,82 +1,90 @@
-# Chelsea FC Predictive Analytics with TimesFM 2.5
+# Chelsea FC vs. TimesFM: A Forecasting Experiment
 
-This repository demonstrates the integration of Google Research's **TimesFM 2.5** (Time Series Foundation Model) into a sports analytics workflow, specifically forecasting Chelsea FC's performance trajectory.
+This is an exploratory sandbox. I wanted to see what happens when you take a simple sports analytics problem—predicting end-of-season points—and run it through a massive AI foundation model instead of a spreadsheet.
 
-Instead of relying on simple linear projections or training custom deep learning models from scratch on limited data, this project uses a 200M parameter foundation model pre-trained on 100 billion real-world time points to generate zero-shot, uncertainty-aware forecasts.
+Currently, Chelsea has 48 points through 31 matches. Simple linear math says they finish with 59 points. I wanted to see if Google's **TimesFM 2.5** (a zero-shot time-series model) could read the context of their recent flat form and brutal remaining schedule better than a simple average.
 
-## Project Structure
+*Spoiler: It does. It projects 56 points. This repo tracks that tension.*
 
+![Live Snapshot](outputs/live_snapshot.png)
+
+---
+
+## What's actually in here?
+
+This isn't an expert machine learning showcase. It's a practical application of a very cool new tool.
+
+* **`data/chelsea_real_2025_26.csv`**: Real match-by-match results scraped from FBref. Updated manually after each matchweek.
+* **`src/live_snapshot.py`**: The core script. It loads the real data, runs the TimesFM forecast on the per-match points, and generates the dashboard visualization above.
+* **`src/carousel.py`**: Generates the 4-slide square carousel used for sharing updates on LinkedIn/Threads.
+* **`TIMESFM_LIVE_SNAPSHOT.md`**: A clean, shareable markdown document explaining the methodology and the "why."
+* **`MODEL_GAPS.md`**: My notes on where the model is currently blind (e.g., player injuries) and how I plan to patch those gaps next.
+
+---
+
+## The Core Insight: Framing the Data
+
+The biggest learning wasn't installing the model; it was figuring out how to ask it the right question.
+
+If you ask TimesFM to forecast a *cumulative* points line that ends in three straight losses (flat line), it just predicts that the line stays flat forever. It predicts the "level," not the growth.
+
+The fix is to forecast the *per-match points* (0, 1, or 3) and then accumulate those on top of the current baseline. Here is the core code that makes it work:
+
+```python
+import timesfm
+from timesfm.timesfm_2p5 import timesfm_2p5_torch
+import numpy as np
+
+# 1. Initialize the model
+model = timesfm_2p5_torch.TimesFM_2p5_200M_torch.from_pretrained(
+    "google/timesfm-2.5-200m-pytorch"
+)
+model.compile(timesfm.ForecastConfig(
+    max_context=512, max_horizon=10,
+    normalize_inputs=True, use_continuous_quantile_head=True,
+    force_flip_invariance=True, infer_is_positive=True, fix_quantile_crossing=True,
+))
+
+# 2. Forecast the per-match points (0, 1, or 3) for the next 7 matches
+pt_fc, qt_fc = model.forecast(
+    horizon=7,
+    inputs=[df['points_earned'].values.astype(float)]
+)
+
+# 3. Accumulate on top of the current 48 points
+per_match_mean = pt_fc[0]
+projected_cumulative = 48 + np.cumsum(per_match_mean)
+
+print(f"Projected final points: {int(round(projected_cumulative[-1]))}")
 ```
-chelsea-timesfm/
-├── data/
-│   └── chelsea_mock_data.csv       # Simulated matchweek data (points, goals, covariates)
-├── src/
-│   ├── data_loader.py              # Script to generate/load the dataset
-│   ├── forecaster.py               # TimesFM wrapper and prediction logic
-│   └── visualizer.py               # Plotting trajectory and confidence bands
-├── outputs/
-│   ├── points_forecast.csv         # Raw output from TimesFM
-│   └── points_trajectory.png       # Visualized forecast with 80% confidence interval
-├── TIMESFM_CAPABILITIES.md         # Reference guide on TimesFM's strengths
-└── README.md                       # This file
-```
 
-## Why TimesFM for Football Analytics?
+---
 
-1. **Zero-Shot Forecasting:** Predicts future points trajectories without needing to be trained on historical Premier League data.
-2. **Quantile Forecasts:** Outputs confidence intervals (e.g., 10th to 90th percentile), moving beyond single-point predictions to show best/worst-case scenarios.
-3. **Small Data Performance:** Excels in environments with limited data points (like a 38-game season) where traditional ML models would overfit.
+## How to run it yourself
 
-## Setup & Installation
+If you want to pull this down and tinker with it:
 
-### Prerequisites
-* Python 3.9+
-* Git
-
-### Installation Steps
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/yourusername/chelsea-timesfm.git
-   cd chelsea-timesfm
-   ```
-
-2. **Install core dependencies:**
+1. **Install dependencies:**
    ```bash
    pip install pandas numpy matplotlib seaborn torch
    ```
 
-3. **Install TimesFM 2.5:**
-   Currently, the 2.5 model requires installation directly from the Google Research GitHub repository:
+2. **Install TimesFM:**
+   *(Note: 2.5 currently requires installation from source)*
    ```bash
    git clone https://github.com/google-research/timesfm.git
    cd timesfm
    pip install -e .
    ```
 
-## Usage
-
-The workflow is broken down into three steps:
-
-1. **Generate Data:**
+3. **Run the visualizer:**
    ```bash
    cd src
-   python data_loader.py
+   python live_snapshot.py
    ```
-   *Creates `data/chelsea_mock_data.csv` representing 31 matchweeks of data.*
 
-2. **Run Forecast:**
-   ```bash
-   python forecaster.py
-   ```
-   *Downloads the TimesFM 2.5 model (if not cached), processes the historical points, and outputs predictions for the remaining 7 matches to `outputs/points_forecast.csv`.*
+## Next Steps
 
-3. **Visualize Results:**
-   ```bash
-   python visualizer.py
-   ```
-   *Generates `outputs/points_trajectory.png` showing the historical trend, the predicted mean, and the 80% confidence band.*
+I'm tracking the gap between the simple math (59 pts) and the TimesFM forecast (56 pts) week over week through May. I also plan to introduce a "fixture difficulty" covariate so the model knows the difference between playing Man City and playing Sunderland.
 
-## Analytical Note
-
-This repository is designed as an **exploratory sandbox**. The data provided is mock data structured to resemble Chelsea's 2025-26 season up to Matchweek 31. The architecture allows for easy swapping with live API data (e.g., via `rvest` or `BeautifulSoup`) to run real-time predictions as the season progresses.
+*Data as of end of Matchweek 31 (April 2026).*
