@@ -1,32 +1,32 @@
 # Social Sharing: TimesFM vs. Linear Projection
 
-Here is the updated, highly engaging copy for LinkedIn (designed to be opinionated and start a conversation), plus the Threads post, both optimized for the new 4-slide carousel format.
+Here is the updated, conversational copy for LinkedIn (framing it as "TimesFM exists, applied it, here are some thoughts"), plus the Threads post. The `TIMESFM_LIVE_SNAPSHOT.md` document remains intact in the repo.
 
 ---
 
-## 1. LinkedIn (Opinionated & Engaging)
+## 1. LinkedIn (Conversational & Applied)
 
-**Goal:** Hook the reader with a strong perspective on why simple data models fail in sports, show the AI alternative, and invite them to follow the experiment.
+**Goal:** A lighter, "build in public" tone. Introduce TimesFM, show a real-world application on sports data, and share a few technical takeaways from the experiment.
 
 **The Post:**
 
-Football isn't linear. So why do we still project end-of-season points like it is?
+Google recently released TimesFM 2.5 — a 200M parameter zero-shot foundation model built specifically for time-series forecasting. 
 
-If you look at Chelsea right now (48 points through 31 matches), the simple math says they finish with 59 points. That’s enough to scrape into Europe. 
+I wanted to see how it handles short, noisy sequences, so I applied it to Chelsea's current Premier League season. 
 
-But anyone watching the games knows that number is lying. The form has flattened. The remaining schedule is brutal (City, Utd, Liverpool). 
+Right now, Chelsea has 48 points through 31 matches. If you run a simple linear projection (current pace * 38 games), they finish with 59 points. But when you feed the actual match-by-match sequence into TimesFM, it reads the recent flat form and the brutal remaining schedule differently. 
 
-I wanted to see if an AI foundation model could read that context better than a spreadsheet formula. I fed the actual match-by-match sequence into Google's TimesFM 2.5 — a 200M parameter zero-shot model built specifically for time-series forecasting. 
+The model's read: 56 points. 
 
-The model's honest read? **56 points.** 
+A few thoughts from building this out:
 
-That 3-point gap is the difference between European qualification and missing out entirely. 
+1. **Foundation models for time-series are getting very accessible.** You don't need to fine-tune this on football data. You just feed it an array of numbers and it forecasts forward with an 80% confidence interval.
+2. **Framing the data is everything.** If you forecast a cumulative points line directly, the model predicts a flat "level" if the recent games were losses. You have to forecast the *per-match* points (0, 1, or 3) and stack them on the baseline to get a real growth projection.
+3. **The tension is trackable.** We now have a 3-point gap between simple math (59) and the AI read (56). That's the difference between European qualification and missing out.
 
-The interesting part wasn't just running the model, it was how I had to frame the data to get a real answer. If you forecast a cumulative line directly, the model just predicts the "level" it ended on. You have to forecast the *per-match* points (0, 1, or 3) and stack them on the baseline. (Code in the carousel 👉)
+I put together a quick carousel on how the implementation works, and I'll be tracking the "Linear vs. TimesFM" gap week over week through May. 
 
-I'm tracking this tension — Linear Math vs. Foundation Model — week over week through the end of the season. 
-
-Which one do you trust more: the season-long average, or the AI reading the recent decay?
+Full code and live tracker in the repo: [Link to your GitHub repo]
 
 *(Attach the `chelsea_timesfm_carousel.pdf` file here using the "Add a document" button)*
 
@@ -38,13 +38,10 @@ Which one do you trust more: the season-long average, or the AI reading the rece
 
 **The Post:**
 
-Linear math vs. AI time-series forecasting. 
+Applied Google's TimesFM 2.5 model to Chelsea's season. 
 
-Chelsea has 48 pts through 31 matches. The simple linear projection says they finish with 59 pts. 
-
-But I ran the actual match-by-match sequence through Google's TimesFM 2.5 model. It reads the recent flat form and the brutal remaining fixtures (City, Utd, Liverpool). 
-
-The model's honest read: 56 pts. 
+Simple math says they finish with 59 pts. 
+The AI model reads the recent flat form and brutal remaining schedule. Its read: 56 pts. 
 
 That 3-point gap is the difference between Europe and nothing. Tracking it week over week through May. 
 
