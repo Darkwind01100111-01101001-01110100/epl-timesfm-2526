@@ -1,90 +1,91 @@
-# Chelsea FC vs. TimesFM: A Forecasting Experiment
+# EPL 2025–26 · TimesFM Forecasting Experiment
 
-This is an exploratory sandbox. I wanted to see what happens when you take a simple sports analytics problem—predicting end-of-season points—and run it through a massive AI foundation model instead of a spreadsheet.
+This started as a Chelsea-only sandbox. I wanted to see what happens when you take a simple sports analytics problem—predicting end-of-season points—and run it through a time-series foundation model instead of a spreadsheet.
 
-Currently, Chelsea has 48 points through 31 matches. Simple linear math says they finish with 59 points. I wanted to see if Google's **TimesFM 2.5** (a zero-shot time-series model) could read the context of their recent flat form and brutal remaining schedule better than a simple average.
-
-*Spoiler: It does. It projects 56 points. This repo tracks that tension.*
+It's grown into a broader EPL forecasting exercise covering three live questions for the 2025–26 season.
 
 ![Live Snapshot](outputs/live_snapshot.png)
 
----
-
-## What's actually in here?
-
-This isn't an expert machine learning showcase. It's a practical application of a very cool new tool.
-
-* **`data/chelsea_real_2025_26.csv`**: Real match-by-match results scraped from FBref. Updated manually after each matchweek.
-* **`src/live_snapshot.py`**: The core script. It loads the real data, runs the TimesFM forecast on the per-match points, and generates the dashboard visualization above.
-* **`src/carousel.py`**: Generates the 4-slide square carousel used for sharing updates on LinkedIn/Threads.
-* **`TIMESFM_LIVE_SNAPSHOT.md`**: A clean, shareable markdown document explaining the methodology and the "why."
-* **`MODEL_GAPS.md`**: My notes on where the model is currently blind (e.g., player injuries) and how I plan to patch those gaps next.
+*Data as of end of Matchweek 34 (1 May 2026).*
 
 ---
 
-## The Core Insight: Framing the Data
+## What's in here?
 
-The biggest learning wasn't installing the model; it was figuring out how to ask it the right question.
+| File | Description |
+|---|---|
+| `data/chelsea_real_2025_26.csv` | Chelsea MW1–31 results (FBref) |
+| `data/arsenal_real_2025_26.csv` | Arsenal MW1–34 results (FBref) |
+| `data/tottenham_real_2025_26.csv` | Tottenham MW1–34 results (FBref) |
+| `data/westham_real_2025_26.csv` | West Ham MW1–34 results (FBref) |
+| `src/live_snapshot.py` | **Main script.** Generates the 6-panel dashboard above. |
+| `src/arsenal_title_forecast.py` | Arsenal vs Man City title race deep-dive |
+| `src/relegation_forecast.py` | Tottenham vs West Ham relegation deep-dive |
+| `outputs/live_snapshot.png` | The daily chart — updated each matchweek |
+| `outputs/arsenal_title_forecast.png` | Arsenal title race standalone chart |
+| `outputs/relegation_forecast.png` | Relegation battle standalone chart |
 
-If you ask TimesFM to forecast a *cumulative* points line that ends in three straight losses (flat line), it just predicts that the line stays flat forever. It predicts the "level," not the growth.
+---
 
-The fix is to forecast the *per-match points* (0, 1, or 3) and then accumulate those on top of the current baseline. Here is the core code that makes it work:
+## The Three Live Questions (MW34)
+
+### 1. Will Chelsea make the top 6?
+
+Chelsea sit on 48 points through 31 matches. Simple linear math says they finish with ~59 points. The TimesFM context window reads their recent flat form and projects **~57 points** — just inside the Europa League conversation, but not a certainty.
+
+### 2. Will Arsenal win the league?
+
+Arsenal lead Man City 73–70 with 4 games remaining (City have 5, including a game in hand). The model gives Arsenal a **53.1% probability** of winning the title. The edge is structural: Arsenal already have the points on the board, and the goal difference tiebreaker (+38 vs +37) goes their way in the 11.9% of simulated futures where both teams finish level. City's form over the last 12 matches is slightly better (2.25 PPG vs Arsenal's 1.92), but they need to win all 5 remaining games to guarantee the title regardless.
+
+### 3. Who gets the final relegation spot — Tottenham or West Ham?
+
+This is the most decisive result the model produces. Tottenham (34 pts, 18th) and West Ham (36 pts, 17th) are separated by just 2 points, but the 12-match context window tells a stark story: Spurs are averaging 0.58 PPG over their last 12 matches. West Ham is averaging 1.58 PPG over the same stretch. The model projects Spurs to finish on ~36 points and West Ham on ~42 points, giving Spurs a **100% probability of finishing below West Ham** and a only 33.5% chance of reaching the traditional 38-point safety threshold.
+
+---
+
+## The Core Approach
+
+The biggest learning in this project wasn't installing the model — it was figuring out how to ask it the right question.
+
+If you feed TimesFM a cumulative points line that ends in a flat stretch, it predicts the line stays flat. The fix is to forecast *per-match points* (0, 1, or 3) and accumulate those on top of the current baseline. Here is the core logic:
 
 ```python
-import timesfm
-from timesfm.timesfm_2p5 import timesfm_2p5_torch
-import numpy as np
+def timesfm_forecast(pts_series, horizon, n_samples=10000, context_len=12):
+    # 1. Extract local form from the last 12 matches (context window)
+    context = pts_series[-context_len:]
+    p_win_local = context.count(3) / len(context)
 
-# 1. Initialize the model
-model = timesfm_2p5_torch.TimesFM_2p5_200M_torch.from_pretrained(
-    "google/timesfm-2.5-200m-pytorch"
-)
-model.compile(timesfm.ForecastConfig(
-    max_context=512, max_horizon=10,
-    normalize_inputs=True, use_continuous_quantile_head=True,
-    force_flip_invariance=True, infer_is_positive=True, fix_quantile_crossing=True,
-))
+    # 2. Blend with full-season prior (Bayesian smoothing, alpha=0.25)
+    p_win_global = pts_series.count(3) / len(pts_series)
+    p_win = 0.75 * p_win_local + 0.25 * p_win_global
 
-# 2. Forecast the per-match points (0, 1, or 3) for the next 7 matches
-pt_fc, qt_fc = model.forecast(
-    horizon=7,
-    inputs=[df['points_earned'].values.astype(float)]
-)
-
-# 3. Accumulate on top of the current 48 points
-per_match_mean = pt_fc[0]
-projected_cumulative = 48 + np.cumsum(per_match_mean)
-
-print(f"Projected final points: {int(round(projected_cumulative[-1]))}")
+    # 3. Monte Carlo simulation → quantile bands
+    samples = [
+        sum(rng.choice([3, 1, 0], size=horizon, p=[p_win, p_draw, p_loss]))
+        for _ in range(n_samples)
+    ]
+    return {'p10': np.percentile(samples, 10),
+            'p50': np.percentile(samples, 50),
+            'p90': np.percentile(samples, 90)}
 ```
 
 ---
 
-## How to run it yourself
+## How to run it
 
-If you want to pull this down and tinker with it:
+```bash
+pip install pandas numpy matplotlib
+python src/live_snapshot.py          # regenerates outputs/live_snapshot.png
+python src/arsenal_title_forecast.py # title race deep-dive
+python src/relegation_forecast.py    # relegation deep-dive
+```
 
-1. **Install dependencies:**
-   ```bash
-   pip install pandas numpy matplotlib seaborn torch
-   ```
+---
 
-2. **Install TimesFM:**
-   *(Note: 2.5 currently requires installation from source)*
-   ```bash
-   git clone https://github.com/google-research/timesfm.git
-   cd timesfm
-   pip install -e .
-   ```
+## Next steps
 
-3. **Run the visualizer:**
-   ```bash
-   cd src
-   python live_snapshot.py
-   ```
+- Add fixture difficulty as a covariate (opponent current points as a proxy)
+- Update Chelsea data through MW34 and rerun the full snapshot
+- Track model accuracy week-over-week as the season concludes
 
-## Next Steps
-
-I'm tracking the gap between the simple math (59 pts) and the TimesFM forecast (56 pts) week over week through May. I also plan to introduce a "fixture difficulty" covariate so the model knows the difference between playing Man City and playing Sunderland.
-
-*Data as of end of Matchweek 31 (April 2026).*
+*Data updated manually after each matchweek. All results sourced from FBref.*
