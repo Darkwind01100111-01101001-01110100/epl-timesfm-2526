@@ -1,0 +1,35 @@
+matchweek,date,venue,result,gf,ga,opponent,days_rest
+1,2025-08-16,Away,L,0,3,Sunderland,
+2,2025-08-22,Home,L,1,5,Chelsea,6
+3,2025-08-31,Away,W,3,0,Nottingham Forest,9
+4,2025-09-13,Home,L,0,3,Tottenham Hotspur,13
+5,2025-09-20,Home,L,1,2,Crystal Palace,7
+6,2025-09-29,Away,D,1,1,Everton,9
+7,2025-10-04,Away,L,0,2,Arsenal,5
+8,2025-10-20,Home,L,0,2,Brentford,16
+9,2025-10-24,Away,L,1,2,Leeds United,4
+10,2025-11-02,Home,W,3,1,Newcastle United,9
+11,2025-11-08,Home,W,3,2,Burnley,6
+12,2025-11-22,Away,D,2,2,Bournemouth,14
+13,2025-11-30,Home,L,0,2,Liverpool,8
+14,2025-12-04,Away,D,1,1,Manchester Utd,4
+15,2025-12-07,Away,D,1,1,Brighton,3
+16,2025-12-14,Home,L,2,3,Aston Villa,7
+17,2025-12-20,Away,L,0,3,Manchester City,6
+18,2025-12-27,Home,L,0,1,Fulham,7
+19,2025-12-30,Home,D,2,2,Brighton,3
+20,2026-01-03,Away,L,0,3,Wolves,4
+21,2026-01-06,Home,L,1,2,Nottingham Forest,3
+22,2026-01-17,Away,W,2,1,Tottenham Hotspur,11
+23,2026-01-24,Home,W,3,1,Sunderland,7
+24,2026-01-31,Away,L,2,3,Chelsea,7
+25,2026-02-07,Away,W,2,0,Burnley,7
+26,2026-02-10,Home,D,1,1,Manchester Utd,3
+27,2026-02-21,Home,D,0,0,Bournemouth,11
+28,2026-02-28,Away,L,2,5,Liverpool,7
+29,2026-03-04,Away,W,1,0,Fulham,4
+30,2026-03-14,Home,D,1,1,Manchester City,10
+31,2026-03-22,Away,L,0,2,Aston Villa,8
+32,2026-04-10,Home,W,4,0,Wolves,19
+33,2026-04-20,Away,D,0,0,Crystal Palace,10
+34,2026-04-25,Home,W,2,1,Everton,5
