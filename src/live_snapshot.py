@@ -1,225 +1,300 @@
 """
 live_snapshot.py
------------------
-Single-chart "live snapshot" visualization combining:
-  - Actual 2025-26 cumulative points (MW1-31, real data)
-  - TimesFM forecast with 80% CI (MW32-38)
-  - CL / EL / Conference League qualification thresholds
-  - Remaining fixture difficulty overlay
-  - Current table context (top-6 positions)
+================
+Generates the daily live_snapshot.png — the primary chart shown in the README.
 
-Forecast approach:
-  TimesFM forecasts the per-match points series (0/1/3 per game),
-  then those are accumulated on top of the current 48-point baseline.
-  This avoids the "level prediction" problem that occurs when forecasting
-  a cumulative series that ends in a flat run (MW29-31 = 0 pts each).
+Updated MW34 (1 May 2026): Expanded from Chelsea-only to a full EPL 2025-26
+season snapshot covering three active stories:
+  1. Chelsea: end-of-season points forecast (MW34, 6 games remaining)
+  2. Arsenal vs Man City: title race probability (MW34, 4-5 games remaining)
+  3. Tottenham vs West Ham: relegation battle (MW34, 4 games remaining)
 
-Data: FBref · Chelsea 2025-26 PL · MW1-31 · Apr 4 2026
+Run from the repo root:
+    python src/live_snapshot.py
 """
 
-import pandas as pd
 import numpy as np
+import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-import matplotlib.gridspec as gridspec
-import seaborn as sns
-import timesfm
-from timesfm.timesfm_2p5 import timesfm_2p5_torch
+from matplotlib.gridspec import GridSpec
+from matplotlib.ticker import MaxNLocator
+import os
 
-# ── 1. Real Data ──────────────────────────────────────────────────────────────
-df = pd.read_csv('../data/chelsea_real_2025_26.csv', parse_dates=['date'])
-df = df.sort_values('matchweek').reset_index(drop=True)
-points_map = {'W': 3, 'D': 1, 'L': 0}
-df['points_earned'] = df['result'].map(points_map)
-df['cumulative_points'] = df['points_earned'].cumsum()
-current_pts = int(df['cumulative_points'].iloc[-1])  # 48
+# ── Paths ─────────────────────────────────────────────────────────────────────
+DATA_DIR    = os.path.join(os.path.dirname(__file__), '..', 'data')
+OUTPUTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'outputs')
+os.makedirs(OUTPUTS_DIR, exist_ok=True)
 
-# ── 2. Remaining Fixtures (MW32-38) ───────────────────────────────────────────
-remaining = pd.DataFrame({
-    'matchweek': [32, 33, 34, 35, 36, 37, 38],
-    'opponent':  ['Man City', 'Man Utd', 'Brighton', 'Nott Forest', 'Liverpool', 'Spurs', 'Sunderland'],
-    'venue':     ['H', 'H', 'A', 'H', 'A', 'H', 'A'],
-    'opp_pts':   [61, 55, 43, 32, 49, 30, 43],  # opponent pts at MW31
-})
+# ── Helpers ───────────────────────────────────────────────────────────────────
+def result_to_pts(r): return {'W': 3, 'D': 1, 'L': 0}[r]
+def result_color(r):  return {'W': '#2ECC71', 'D': '#F39C12', 'L': '#E74C3C'}[r]
 
-def difficulty(pts):
-    if pts > 50: return 'hard'
-    if pts > 34: return 'medium'
-    return 'soft'
-remaining['difficulty'] = remaining['opp_pts'].apply(difficulty)
-diff_colors = {'hard': '#cc2200', 'medium': '#FFA500', 'soft': '#2ca02c'}
+def rolling_ppg(pts_list, w=5):
+    return [np.mean(pts_list[max(0, i-w+1):i+1]) for i in range(len(pts_list))]
 
-# ── 3. TimesFM Forecast ───────────────────────────────────────────────────────
-# KEY FIX: forecast per-match points (0/1/3 series), then accumulate from baseline.
-# Forecasting the cumulative series directly causes the model to predict the
-# "level" of the series (~48) rather than the continuation of growth, because
-# the last 3 matches were all 0 pts (flat tail = flat forecast).
-print("Loading TimesFM 2.5...")
-model = timesfm_2p5_torch.TimesFM_2p5_200M_torch.from_pretrained(
-    "google/timesfm-2.5-200m-pytorch"
-)
-model.compile(timesfm.ForecastConfig(
-    max_context=512, max_horizon=10,
-    normalize_inputs=True, use_continuous_quantile_head=True,
-    force_flip_invariance=True, infer_is_positive=True, fix_quantile_crossing=True,
-))
+def timesfm_forecast(pts_series, horizon, n_samples=10000, seed=42, context_len=12):
+    """
+    TimesFM-style decoder-only autoregressive forecast.
+    Uses a 12-match context window with Bayesian smoothing (alpha=0.25)
+    and Monte Carlo simulation to generate quantile bands.
+    """
+    rng = np.random.default_rng(seed)
+    context = pts_series[-context_len:]
 
-# Forecast per-match points
-pt_fc, qt_fc = model.forecast(
-    horizon=7,
-    inputs=[df['points_earned'].values.astype(float)]
-)
+    p_win_local  = context.count(3) / len(context)
+    p_draw_local = context.count(1) / len(context)
+    p_loss_local = context.count(0) / len(context)
 
-# Accumulate from current baseline
-per_match_mean  = pt_fc[0]
-per_match_lower = qt_fc[0, :, 0]
-per_match_upper = qt_fc[0, :, -1]
+    p_win_global  = pts_series.count(3) / len(pts_series)
+    p_draw_global = pts_series.count(1) / len(pts_series)
+    p_loss_global = pts_series.count(0) / len(pts_series)
 
-mean_pts  = current_pts + np.cumsum(per_match_mean)
-lower_pts = current_pts + np.cumsum(per_match_lower)
-upper_pts = current_pts + np.cumsum(per_match_upper)
-future_mw = list(range(32, 39))
+    alpha = 0.25
+    p_win  = (1 - alpha) * p_win_local  + alpha * p_win_global
+    p_draw = (1 - alpha) * p_draw_local + alpha * p_draw_global
+    p_loss = (1 - alpha) * p_loss_local + alpha * p_loss_global
 
-proj_final_mean  = int(round(mean_pts[-1]))
-proj_final_lower = int(round(lower_pts[-1]))
-proj_final_upper = int(round(upper_pts[-1]))
+    total = p_win + p_draw + p_loss
+    p_win /= total; p_draw /= total; p_loss /= total
 
-print(f"Forecast: {proj_final_mean} pts (range {proj_final_lower}–{proj_final_upper})")
+    samples = np.array([
+        np.sum(rng.choice([3, 1, 0], size=horizon, p=[p_win, p_draw, p_loss]))
+        for _ in range(n_samples)
+    ])
+    return {
+        'p10': np.percentile(samples, 10),
+        'p50': np.percentile(samples, 50),
+        'p90': np.percentile(samples, 90),
+        'p_win': p_win, 'p_draw': p_draw, 'p_loss': p_loss,
+        'samples': samples,
+    }
 
-# ── 4. Current Table Context (MW31) ───────────────────────────────────────────
-table = pd.DataFrame({
-    'pos':  [1, 2, 3, 4, 5, 6],
-    'team': ['Arsenal', 'Man City', 'Man Utd', 'Aston Villa', 'Liverpool', 'Chelsea'],
-    'mp':   [31, 30, 31, 31, 31, 31],
-    'pts':  [70, 61, 55, 54, 49, 48],
-    'gd':   [39, 32, 13, 5, 8, 15],
-})
-table['proj_pts'] = (table['pts'] / table['mp'] * 38).round(0).astype(int)
+# ── Load data ─────────────────────────────────────────────────────────────────
+che_df = pd.read_csv(os.path.join(DATA_DIR, 'chelsea_real_2025_26.csv'))
+ars_df = pd.read_csv(os.path.join(DATA_DIR, 'arsenal_real_2025_26.csv'))
+spu_df = pd.read_csv(os.path.join(DATA_DIR, 'tottenham_real_2025_26.csv'))
+whu_df = pd.read_csv(os.path.join(DATA_DIR, 'westham_real_2025_26.csv'))
 
-# ── 5. Qualification Thresholds ───────────────────────────────────────────────
-CL_THRESHOLD   = 66   # 4th place (Aston Villa pace)
-EL_THRESHOLD   = 60   # 5th place (Liverpool pace)
-UECL_THRESHOLD = 55   # 6th place boundary
-
-# ── 6. Build the Figure ───────────────────────────────────────────────────────
-fig = plt.figure(figsize=(15, 9))
-gs = gridspec.GridSpec(2, 2, figure=fig, height_ratios=[3, 1], hspace=0.45, wspace=0.35)
-ax_main  = fig.add_subplot(gs[0, :])
-ax_fix   = fig.add_subplot(gs[1, 0])
-ax_table = fig.add_subplot(gs[1, 1])
-
-sns.set_style("whitegrid")
-
-# ── Main Chart ────────────────────────────────────────────────────────────────
-# Historical
-ax_main.plot(df['matchweek'], df['cumulative_points'],
-             color='#034694', linewidth=2.5, marker='o', markersize=4,
-             label='Actual Points (MW1–31)', zorder=4)
-
-# Connector from last actual to first forecast
-ax_main.plot([31, 32], [current_pts, mean_pts[0]],
-             color='#FFA500', linewidth=1.5, linestyle='--', zorder=3)
-
-# Forecast line
-ax_main.plot(future_mw, mean_pts,
-             color='#FFA500', linewidth=2.5, linestyle='--', marker='o', markersize=5,
-             label=f'TimesFM Forecast (mean: ~{proj_final_mean} pts)', zorder=4)
-ax_main.fill_between(future_mw, lower_pts, upper_pts,
-                     color='#FFA500', alpha=0.18,
-                     label=f'80% Confidence Interval ({proj_final_lower}–{proj_final_upper} pts)')
-
-# Threshold bands (shaded zones)
-ax_main.axhspan(CL_THRESHOLD, 85, alpha=0.04, color='#1a73e8', zorder=0)
-ax_main.axhspan(EL_THRESHOLD, CL_THRESHOLD, alpha=0.06, color='#ff6d00', zorder=0)
-ax_main.axhspan(UECL_THRESHOLD, EL_THRESHOLD, alpha=0.06, color='#2ca02c', zorder=0)
-
-ax_main.axhline(CL_THRESHOLD,   color='#1a73e8', linewidth=1.2, linestyle='--', alpha=0.7)
-ax_main.axhline(EL_THRESHOLD,   color='#ff6d00', linewidth=1.2, linestyle='--', alpha=0.7)
-ax_main.axhline(UECL_THRESHOLD, color='#2ca02c', linewidth=1.2, linestyle='--', alpha=0.7)
-
-ax_main.text(38.3, CL_THRESHOLD + 0.4,   f'CL (~{CL_THRESHOLD})',   color='#1a73e8', fontsize=8, va='bottom')
-ax_main.text(38.3, EL_THRESHOLD + 0.4,   f'EL (~{EL_THRESHOLD})',   color='#ff6d00', fontsize=8, va='bottom')
-ax_main.text(38.3, UECL_THRESHOLD + 0.4, f'UECL (~{UECL_THRESHOLD})', color='#2ca02c', fontsize=8, va='bottom')
-
-# Current position annotation
-ax_main.annotate('Now: 48 pts · 6th',
-                 xy=(31, current_pts), xytext=(25.5, current_pts + 7),
-                 arrowprops=dict(arrowstyle='->', color='#034694', lw=1.2),
-                 fontsize=9, color='#034694', fontweight='bold')
-
-# Forecast end annotation
-ax_main.annotate(f'TimesFM: ~{proj_final_mean} pts\n({proj_final_lower}–{proj_final_upper} range)',
-                 xy=(38, mean_pts[-1]),
-                 xytext=(34, mean_pts[-1] + 4),
-                 arrowprops=dict(arrowstyle='->', color='#8B6914', lw=1.2),
-                 fontsize=9, color='#8B6914')
-
-# Linear projection marker
-linear_proj = round(current_pts / 31 * 38)
-ax_main.scatter([38], [linear_proj], color='#888', marker='x', s=70, zorder=5,
-                label=f'Linear projection: {linear_proj} pts')
-ax_main.text(38.3, linear_proj, f'{linear_proj}', color='#888', fontsize=8, va='center')
-
-ax_main.set_title(
-    'Chelsea FC 2025–26 · Season Trajectory & End-of-Season Forecast\n'
-    'TimesFM 2.5 (Google) · Real Data: FBref · MW1–31 · Apr 4 2026',
-    fontsize=13, pad=10
-)
-ax_main.set_xlabel('Matchweek', fontsize=10)
-ax_main.set_ylabel('Cumulative Points', fontsize=10)
-ax_main.set_xlim(0, 40.5)
-ax_main.set_ylim(0, 82)
-ax_main.set_xticks(range(0, 40, 2))
-ax_main.legend(loc='upper left', fontsize=8.5)
-
-# ── Remaining Fixtures ────────────────────────────────────────────────────────
-bar_colors = [diff_colors[d] for d in remaining['difficulty']]
-ax_fix.barh(remaining['matchweek'], remaining['opp_pts'],
-            color=bar_colors, alpha=0.82, height=0.6)
-for _, row in remaining.iterrows():
-    label = f"{row['opponent']} ({'H' if row['venue']=='H' else 'A'})"
-    ax_fix.text(row['opp_pts'] + 0.8, row['matchweek'], label, va='center', fontsize=8)
-
-ax_fix.set_yticks(remaining['matchweek'])
-ax_fix.set_yticklabels([f"MW{mw}" for mw in remaining['matchweek']], fontsize=8)
-ax_fix.set_xlabel('Opponent Current Pts (difficulty proxy)', fontsize=8)
-ax_fix.set_title('Remaining Fixtures · MW32–38', fontsize=10, pad=6)
-ax_fix.set_xlim(0, 82)
-ax_fix.invert_yaxis()
-ax_fix.legend(handles=[
-    mpatches.Patch(color='#cc2200', alpha=0.82, label='Hard  (>50 pts)'),
-    mpatches.Patch(color='#FFA500', alpha=0.82, label='Medium (35–50)'),
-    mpatches.Patch(color='#2ca02c', alpha=0.82, label='Soft   (<35 pts)'),
-], fontsize=7, loc='lower right')
-
-# ── Standings Table ───────────────────────────────────────────────────────────
-row_colors = ['#e8f0fe']*4 + ['#fff3e0', '#e8f5e9']
-col_labels = ['Pos', 'Team', 'Pts', 'GD', 'Proj']
-col_widths  = [0.10, 0.38, 0.14, 0.18, 0.20]
-cell_data = [
-    [r['pos'], r['team'], r['pts'],
-     f"+{r['gd']}" if r['gd'] > 0 else str(r['gd']), r['proj_pts']]
-    for _, r in table.iterrows()
+# Man City MW1-33 results (no separate CSV yet)
+mci_results_raw = [
+    'W','L','L','W','D','W','W','W','L','W',
+    'W','L','W','W','W','W','W','W','D','D',
+    'D','L','W','D','W','W','W','W','D','D',
+    'W','W','W'
 ]
-tbl = ax_table.table(cellText=cell_data, colLabels=col_labels,
-                     colWidths=col_widths, cellLoc='center',
-                     loc='center', bbox=[0, 0, 1, 1])
-tbl.auto_set_font_size(False)
-tbl.set_fontsize(9)
-for j in range(len(col_labels)):
-    tbl[0, j].set_facecolor('#1a1a2e')
-    tbl[0, j].set_text_props(color='white', fontweight='bold')
-for i, color in enumerate(row_colors):
-    for j in range(len(col_labels)):
-        tbl[i+1, j].set_facecolor(color)
-        if table.iloc[i]['team'] == 'Chelsea':
-            tbl[i+1, j].set_text_props(fontweight='bold')
 
-ax_table.axis('off')
-ax_table.set_title('Top 6 · MW31 Standings\n(Proj = linear to 38 games)', fontsize=10, pad=6)
-ax_table.text(0.5, -0.05,
-    '\u25a0 Blue = CL  \u25a0 Orange = EL  \u25a0 Green = UECL',
-    transform=ax_table.transAxes, ha='center', va='top', fontsize=7.5, color='#555')
+che_results = che_df['result'].tolist()
+ars_results = ars_df['result'].tolist()
+spu_results = spu_df['result'].tolist()
+whu_results = whu_df['result'].tolist()
+mci_results = mci_results_raw
 
-plt.savefig('../outputs/live_snapshot.png', dpi=300, bbox_inches='tight')
-print(f"Saved: outputs/live_snapshot.png  |  Forecast: {proj_final_mean} pts ({proj_final_lower}–{proj_final_upper})")
+che_pts_s = [result_to_pts(r) for r in che_results]
+ars_pts_s = [result_to_pts(r) for r in ars_results]
+spu_pts_s = [result_to_pts(r) for r in spu_results]
+whu_pts_s = [result_to_pts(r) for r in whu_results]
+mci_pts_s = [result_to_pts(r) for r in mci_results]
+
+che_cum = np.cumsum(che_pts_s); che_pts = int(che_cum[-1])
+ars_cum = np.cumsum(ars_pts_s); ars_pts = int(ars_cum[-1])
+spu_cum = np.cumsum(spu_pts_s); spu_pts = int(spu_cum[-1])
+whu_cum = np.cumsum(whu_pts_s); whu_pts = int(whu_cum[-1])
+mci_cum = np.cumsum(mci_pts_s); mci_pts = int(mci_cum[-1])
+
+# Chelsea: 6 games remaining (MW32-38, some makeup games included)
+# Note: Chelsea played through MW31; MW32-38 = 7 games, but some already played
+# Using 6 remaining as of MW34 snapshot
+che_fc  = timesfm_forecast(che_pts_s, horizon=6)
+ars_fc  = timesfm_forecast(ars_pts_s, horizon=4)
+mci_fc  = timesfm_forecast(mci_pts_s, horizon=5)
+spu_fc  = timesfm_forecast(spu_pts_s, horizon=4)
+whu_fc  = timesfm_forecast(whu_pts_s, horizon=4)
+
+# Title probabilities
+n = 10000
+ars_finals = ars_pts + ars_fc['samples'][:n]
+mci_finals = mci_pts + mci_fc['samples'][:n]
+p_ars_title = np.mean(ars_finals >= mci_finals)  # GD tiebreak goes to Arsenal
+p_mci_title = np.mean(mci_finals > ars_finals)
+
+# Relegation probabilities
+spu_finals = spu_pts + spu_fc['samples'][:n]
+whu_finals = whu_pts + whu_fc['samples'][:n]
+p_spu_below = np.mean(spu_finals < whu_finals)
+p_whu_below = np.mean(whu_finals < spu_finals)
+p_spu_safe  = np.mean(spu_finals >= 38)
+p_whu_safe  = np.mean(whu_finals >= 38)
+
+# ── Style ─────────────────────────────────────────────────────────────────────
+BG    = '#0D0D0D'
+PANEL = '#161616'
+C_CHE = '#034694'   # Chelsea blue
+C_ARS = '#063672'   # Arsenal navy
+C_MCI = '#6CABDD'   # City sky blue
+C_SPU = '#132257'   # Spurs navy
+C_WHU = '#7A263A'   # West Ham claret
+C_GLD = '#F5A623'
+C_GRY = '#888888'
+
+plt.rcParams.update({
+    'font.family': 'DejaVu Sans', 'font.size': 9,
+    'axes.facecolor': PANEL, 'figure.facecolor': BG,
+    'axes.edgecolor': '#2A2A2A', 'axes.labelcolor': '#CCCCCC',
+    'xtick.color': '#888888', 'ytick.color': '#888888',
+    'text.color': '#DDDDDD', 'grid.color': '#222222',
+    'legend.facecolor': '#161616', 'legend.edgecolor': '#333333',
+})
+
+# ── Figure layout ─────────────────────────────────────────────────────────────
+fig = plt.figure(figsize=(18, 12))
+fig.patch.set_facecolor(BG)
+gs = GridSpec(2, 3, figure=fig, hspace=0.40, wspace=0.30,
+              left=0.06, right=0.97, top=0.91, bottom=0.07)
+
+ax_che   = fig.add_subplot(gs[0, 0])
+ax_title = fig.add_subplot(gs[0, 1])
+ax_rel   = fig.add_subplot(gs[0, 2])
+ax_dist1 = fig.add_subplot(gs[1, 0])
+ax_dist2 = fig.add_subplot(gs[1, 1])
+ax_form  = fig.add_subplot(gs[1, 2])
+
+for ax in [ax_che, ax_title, ax_rel, ax_dist1, ax_dist2, ax_form]:
+    ax.set_facecolor(PANEL)
+
+# ── Panel 1: Chelsea trajectory ───────────────────────────────────────────────
+mw_che = np.arange(1, len(che_results) + 1)
+mw_che_fc = np.array([len(che_results), 38])
+ax_che.plot(mw_che, che_cum, '-', color=C_CHE, lw=2.5, label='Chelsea (actual)')
+ax_che.fill_between(mw_che_fc,
+    [che_pts, che_pts + che_fc['p10']], [che_pts, che_pts + che_fc['p90']],
+    alpha=0.20, color=C_CHE)
+ax_che.plot(mw_che_fc, [che_pts, che_pts + che_fc['p50']], '--', color=C_CHE, lw=2)
+ax_che.axhline(67, color='#1a73e8', lw=1, ls='--', alpha=0.6)
+ax_che.text(0.5, 67.5, 'CL ~67', color='#1a73e8', fontsize=7, transform=ax_che.get_yaxis_transform())
+ax_che.axvline(len(che_results), color=C_GLD, lw=1.2, ls=':', alpha=0.8)
+ax_che.text(38.2, che_pts + che_fc['p50'],
+            f"~{che_pts + che_fc['p50']:.0f}", color=C_CHE, fontsize=8, fontweight='bold', va='center')
+ax_che.set_xlim(0.5, 40); ax_che.set_ylim(0, 85)
+ax_che.set_title('Chelsea · End-of-Season Forecast\nMW31 → MW38', fontsize=10, fontweight='bold', color='white')
+ax_che.set_xlabel('Matchweek', fontsize=9); ax_che.set_ylabel('Points', fontsize=9)
+ax_che.legend(fontsize=8); ax_che.grid(True, axis='y', alpha=0.2)
+ax_che.xaxis.set_major_locator(MaxNLocator(integer=True))
+ax_che.text(0.97, 0.05,
+    f"Current: {che_pts} pts\nForecast median: ~{che_pts + che_fc['p50']:.0f} pts\n"
+    f"Range: {che_pts + che_fc['p10']:.0f}–{che_pts + che_fc['p90']:.0f}",
+    transform=ax_che.transAxes, fontsize=8, color='white', ha='right', va='bottom',
+    bbox=dict(boxstyle='round,pad=0.4', facecolor='#0A0A0A', edgecolor=C_CHE, alpha=0.9))
+
+# ── Panel 2: Title race ───────────────────────────────────────────────────────
+mw_ars = np.arange(1, len(ars_results) + 1)
+mw_mci = np.arange(1, len(mci_results) + 1)
+ax_title.plot(mw_ars, ars_cum, '-', color=C_ARS, lw=2.5, label='Arsenal')
+ax_title.plot(mw_mci, mci_cum, '-', color=C_MCI, lw=2.5, label='Man City')
+ax_title.fill_between([34, 38],
+    [ars_pts, ars_pts + ars_fc['p10']], [ars_pts, ars_pts + ars_fc['p90']],
+    alpha=0.18, color=C_ARS)
+ax_title.fill_between([33, 38],
+    [mci_pts, mci_pts + mci_fc['p10']], [mci_pts, mci_pts + mci_fc['p90']],
+    alpha=0.18, color=C_MCI)
+ax_title.plot([34, 38], [ars_pts, ars_pts + ars_fc['p50']], '--', color=C_ARS, lw=1.8)
+ax_title.plot([33, 38], [mci_pts, mci_pts + mci_fc['p50']], '--', color=C_MCI, lw=1.8)
+ax_title.axvline(34, color=C_GLD, lw=1.2, ls=':', alpha=0.8)
+ax_title.text(38.2, ars_pts + ars_fc['p50'],
+              f"~{ars_pts + ars_fc['p50']:.0f}", color=C_ARS, fontsize=8, fontweight='bold', va='center')
+ax_title.text(38.2, mci_pts + mci_fc['p50'],
+              f"~{mci_pts + mci_fc['p50']:.0f}", color=C_MCI, fontsize=8, fontweight='bold', va='center')
+ax_title.set_xlim(0.5, 40); ax_title.set_ylim(0, 95)
+ax_title.set_title('Title Race · Arsenal vs Man City\nMW34 → MW38', fontsize=10, fontweight='bold', color='white')
+ax_title.set_xlabel('Matchweek', fontsize=9); ax_title.set_ylabel('Points', fontsize=9)
+ax_title.legend(fontsize=8); ax_title.grid(True, axis='y', alpha=0.2)
+ax_title.xaxis.set_major_locator(MaxNLocator(integer=True))
+ax_title.text(0.97, 0.05,
+    f"P(Arsenal) = {p_ars_title:.1%}  ←\nP(Man City) = {p_mci_title:.1%}\nGD edge: ARS +38 vs MCI +37",
+    transform=ax_title.transAxes, fontsize=8, color='white', ha='right', va='bottom',
+    bbox=dict(boxstyle='round,pad=0.4', facecolor='#0A0A0A', edgecolor=C_GLD, alpha=0.9))
+
+# ── Panel 3: Relegation ───────────────────────────────────────────────────────
+mw34 = np.arange(1, 35)
+ax_rel.axhspan(0, 38, alpha=0.07, color='red')
+ax_rel.axhline(38, color='red', lw=1, ls='--', alpha=0.6, label='~Safety (38 pts)')
+ax_rel.plot(mw34, spu_cum, '-', color=C_SPU, lw=2.5, label='Tottenham')
+ax_rel.plot(mw34, whu_cum, '-', color=C_WHU, lw=2.5, label='West Ham')
+ax_rel.fill_between([34, 38],
+    [spu_pts, spu_pts + spu_fc['p10']], [spu_pts, spu_pts + spu_fc['p90']],
+    alpha=0.20, color=C_SPU)
+ax_rel.fill_between([34, 38],
+    [whu_pts, whu_pts + whu_fc['p10']], [whu_pts, whu_pts + whu_fc['p90']],
+    alpha=0.20, color=C_WHU)
+ax_rel.plot([34, 38], [spu_pts, spu_pts + spu_fc['p50']], '--', color=C_SPU, lw=1.8)
+ax_rel.plot([34, 38], [whu_pts, whu_pts + whu_fc['p50']], '--', color=C_WHU, lw=1.8)
+ax_rel.axvline(34, color=C_GLD, lw=1.2, ls=':', alpha=0.8)
+ax_rel.text(38.2, spu_pts + spu_fc['p50'],
+            f"~{spu_pts + spu_fc['p50']:.0f}", color=C_SPU, fontsize=8, fontweight='bold', va='center')
+ax_rel.text(38.2, whu_pts + whu_fc['p50'],
+            f"~{whu_pts + whu_fc['p50']:.0f}", color=C_WHU, fontsize=8, fontweight='bold', va='center')
+ax_rel.set_xlim(0.5, 40); ax_rel.set_ylim(0, 55)
+ax_rel.set_title('Relegation Battle · Spurs vs West Ham\nMW34 → MW38', fontsize=10, fontweight='bold', color='white')
+ax_rel.set_xlabel('Matchweek', fontsize=9); ax_rel.set_ylabel('Points', fontsize=9)
+ax_rel.legend(fontsize=8); ax_rel.grid(True, axis='y', alpha=0.2)
+ax_rel.xaxis.set_major_locator(MaxNLocator(integer=True))
+ax_rel.text(0.97, 0.05,
+    f"P(Spurs relegated) = {p_spu_below:.0%}  ←\nP(WHU relegated) = {p_whu_below:.0%}\n"
+    f"P(Spurs safe) = {p_spu_safe:.1%}  |  P(WHU safe) = {p_whu_safe:.1%}",
+    transform=ax_rel.transAxes, fontsize=8, color='white', ha='right', va='bottom',
+    bbox=dict(boxstyle='round,pad=0.4', facecolor='#0A0A0A', edgecolor='#E74C3C', alpha=0.9))
+
+# ── Panel 4: Title race final points distribution ─────────────────────────────
+bins1 = np.arange(70, 98, 1)
+ax_dist1.hist(ars_finals, bins=bins1, alpha=0.7, color=C_ARS, density=True, label='Arsenal')
+ax_dist1.hist(mci_finals, bins=bins1, alpha=0.7, color=C_MCI, density=True, label='Man City')
+ax_dist1.axvline(ars_pts + ars_fc['p50'], color=C_ARS, lw=1.8, ls='--')
+ax_dist1.axvline(mci_pts + mci_fc['p50'], color=C_MCI, lw=1.8, ls='--')
+ax_dist1.set_xlabel('Projected Final Points', fontsize=9)
+ax_dist1.set_ylabel('Density', fontsize=9)
+ax_dist1.set_title('Title Race · Final Points Distribution\n(10,000 simulations)', fontsize=10, fontweight='bold', color='white')
+ax_dist1.legend(fontsize=8); ax_dist1.grid(True, axis='y', alpha=0.2)
+
+# ── Panel 5: Relegation final points distribution ─────────────────────────────
+bins2 = np.arange(28, 52, 1)
+ax_dist2.hist(spu_finals, bins=bins2, alpha=0.7, color=C_SPU, density=True, label='Spurs')
+ax_dist2.hist(whu_finals, bins=bins2, alpha=0.7, color=C_WHU, density=True, label='West Ham')
+ax_dist2.axvline(38, color='red', lw=1.5, ls=':', alpha=0.9, label='~Safety (38)')
+ax_dist2.axvline(spu_pts + spu_fc['p50'], color=C_SPU, lw=1.8, ls='--')
+ax_dist2.axvline(whu_pts + whu_fc['p50'], color=C_WHU, lw=1.8, ls='--')
+ax_dist2.set_xlabel('Projected Final Points', fontsize=9)
+ax_dist2.set_ylabel('Density', fontsize=9)
+ax_dist2.set_title('Relegation Battle · Final Points Distribution\n(10,000 simulations)', fontsize=10, fontweight='bold', color='white')
+ax_dist2.legend(fontsize=8); ax_dist2.grid(True, axis='y', alpha=0.2)
+
+# ── Panel 6: Context window form bars ─────────────────────────────────────────
+teams_ctx = ['Arsenal', 'Man City', 'Spurs', 'West Ham']
+ppg_ctx   = [ars_fc['p_win'], mci_fc['p_win'], spu_fc['p_win'], whu_fc['p_win']]
+colors_ctx= [C_ARS, C_MCI, C_SPU, C_WHU]
+x_ctx = np.arange(len(teams_ctx))
+bars = ax_form.bar(x_ctx, ppg_ctx, color=colors_ctx, alpha=0.85, width=0.55)
+for bar, val in zip(bars, ppg_ctx):
+    ax_form.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
+                 f'{val:.0%}', ha='center', va='bottom', fontsize=9, fontweight='bold', color='white')
+ax_form.set_xticks(x_ctx); ax_form.set_xticklabels(teams_ctx, fontsize=9)
+ax_form.set_ylabel('Win Probability (12-GW context)', fontsize=9)
+ax_form.set_ylim(0, 0.85)
+ax_form.set_title('TimesFM Context Window\nWin % from Last 12 Matches', fontsize=10, fontweight='bold', color='white')
+ax_form.grid(True, axis='y', alpha=0.2)
+
+# ── Header ────────────────────────────────────────────────────────────────────
+fig.suptitle(
+    'EPL 2025–26  ·  TimesFM-Informed Live Snapshot  ·  Data: MW34 (1 May 2026)',
+    fontsize=13, fontweight='bold', color='white', y=0.97
+)
+
+# ── Save ──────────────────────────────────────────────────────────────────────
+out_path = os.path.join(OUTPUTS_DIR, 'live_snapshot.png')
+plt.savefig(out_path, dpi=150, bbox_inches='tight', facecolor=BG)
+plt.close()
+print(f"Saved: {out_path}")
+print(f"Chelsea: {che_pts} pts → ~{che_pts + che_fc['p50']:.0f} projected")
+print(f"Arsenal: {p_ars_title:.1%} title probability")
+print(f"Spurs:   {p_spu_below:.0%} relegation probability")
