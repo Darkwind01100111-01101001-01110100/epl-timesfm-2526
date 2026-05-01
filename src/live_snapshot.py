@@ -104,10 +104,8 @@ spu_cum = np.cumsum(spu_pts_s); spu_pts = int(spu_cum[-1])
 whu_cum = np.cumsum(whu_pts_s); whu_pts = int(whu_cum[-1])
 mci_cum = np.cumsum(mci_pts_s); mci_pts = int(mci_cum[-1])
 
-# Chelsea: 6 games remaining (MW32-38, some makeup games included)
-# Note: Chelsea played through MW31; MW32-38 = 7 games, but some already played
-# Using 6 remaining as of MW34 snapshot
-che_fc  = timesfm_forecast(che_pts_s, horizon=6)
+# Chelsea: 4 games remaining (MW35-38), now at parity with other clubs at MW34
+che_fc  = timesfm_forecast(che_pts_s, horizon=4)
 ars_fc  = timesfm_forecast(ars_pts_s, horizon=4)
 mci_fc  = timesfm_forecast(mci_pts_s, horizon=5)
 spu_fc  = timesfm_forecast(spu_pts_s, horizon=4)
@@ -178,7 +176,7 @@ ax_che.axvline(len(che_results), color=C_GLD, lw=1.2, ls=':', alpha=0.8)
 ax_che.text(38.2, che_pts + che_fc['p50'],
             f"~{che_pts + che_fc['p50']:.0f}", color=C_CHE, fontsize=8, fontweight='bold', va='center')
 ax_che.set_xlim(0.5, 40); ax_che.set_ylim(0, 85)
-ax_che.set_title('Chelsea · End-of-Season Forecast\nMW31 → MW38', fontsize=10, fontweight='bold', color='white')
+ax_che.set_title('Chelsea · End-of-Season Forecast\nMW34 → MW38', fontsize=10, fontweight='bold', color='white')
 ax_che.set_xlabel('Matchweek', fontsize=9); ax_che.set_ylabel('Points', fontsize=9)
 ax_che.legend(fontsize=8); ax_che.grid(True, axis='y', alpha=0.2)
 ax_che.xaxis.set_major_locator(MaxNLocator(integer=True))

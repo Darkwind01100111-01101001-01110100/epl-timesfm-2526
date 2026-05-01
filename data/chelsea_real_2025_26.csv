@@ -30,3 +30,6 @@ matchweek,date,venue,result,gf,ga,opponent,days_rest
 29,2026-03-04,Away,W,4,1,Aston Villa,3
 30,2026-03-14,Home,L,0,1,Newcastle United,10
 31,2026-03-21,Away,L,0,3,Everton,7
+32,2026-04-12,Away,L,0,3,Manchester City,22
+33,2026-04-18,Home,L,0,1,Manchester United,6
+34,2026-04-21,Away,L,0,3,Brighton,3

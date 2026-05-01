@@ -6,7 +6,7 @@ It's grown into a broader EPL forecasting exercise covering three live questions
 
 ![Live Snapshot](outputs/live_snapshot.png)
 
-*Data as of end of Matchweek 34 (1 May 2026).*
+*Data as of end of Matchweek 34 (1 May 2026). All four clubs now at parity.*
 
 ---
 
@@ -14,14 +14,14 @@ It's grown into a broader EPL forecasting exercise covering three live questions
 
 | File | Description |
 |---|---|
-| `data/chelsea_real_2025_26.csv` | Chelsea MW1–31 results (FBref) |
+| `data/chelsea_real_2025_26.csv` | Chelsea MW1–34 results (FBref) |
 | `data/arsenal_real_2025_26.csv` | Arsenal MW1–34 results (FBref) |
 | `data/tottenham_real_2025_26.csv` | Tottenham MW1–34 results (FBref) |
 | `data/westham_real_2025_26.csv` | West Ham MW1–34 results (FBref) |
 | `src/live_snapshot.py` | **Main script.** Generates the 6-panel dashboard above. |
 | `src/arsenal_title_forecast.py` | Arsenal vs Man City title race deep-dive |
 | `src/relegation_forecast.py` | Tottenham vs West Ham relegation deep-dive |
-| `outputs/live_snapshot.png` | The daily chart — updated each matchweek |
+| `outputs/live_snapshot.png` | The primary chart — updated each matchweek |
 | `outputs/arsenal_title_forecast.png` | Arsenal title race standalone chart |
 | `outputs/relegation_forecast.png` | Relegation battle standalone chart |
 
@@ -29,17 +29,17 @@ It's grown into a broader EPL forecasting exercise covering three live questions
 
 ## The Three Live Questions (MW34)
 
-### 1. Will Chelsea make the top 6?
+### 1. Will Chelsea avoid the bottom half?
 
-Chelsea sit on 48 points through 31 matches. Simple linear math says they finish with ~59 points. The TimesFM context window reads their recent flat form and projects **~57 points** — just inside the Europa League conversation, but not a certainty.
+Chelsea sit on 48 points through 34 matches — the same number as at MW31, after going 0-3 Man City, 0-1 Man United, and 0-3 Brighton across MW32–34. Three straight losses, zero points. The TimesFM context window now reads that extended collapse and projects a median finish of **~53 points** (range 49–57). That's a significant downward revision from the ~57 projected at MW31 and puts Chelsea well clear of relegation but outside any European conversation. The Conference League threshold (~55 pts) is now at the top of their realistic range, not the median.
 
 ### 2. Will Arsenal win the league?
 
-Arsenal lead Man City 73–70 with 4 games remaining (City have 5, including a game in hand). The model gives Arsenal a **53.1% probability** of winning the title. The edge is structural: Arsenal already have the points on the board, and the goal difference tiebreaker (+38 vs +37) goes their way in the 11.9% of simulated futures where both teams finish level. City's form over the last 12 matches is slightly better (2.25 PPG vs Arsenal's 1.92), but they need to win all 5 remaining games to guarantee the title regardless.
+Arsenal lead Man City 73–70 with 4 games remaining (City have 5, including a game in hand). The model gives Arsenal a **53.1% probability** of winning the title. The edge is structural: Arsenal already have the points on the board, and the goal difference tiebreaker (+38 vs +37) goes their way in the ~12% of simulated futures where both teams finish level. City's form over the last 12 matches is slightly better (2.25 PPG vs Arsenal's 1.92), but they need to win all 5 remaining games to guarantee the title regardless.
 
 ### 3. Who gets the final relegation spot — Tottenham or West Ham?
 
-This is the most decisive result the model produces. Tottenham (34 pts, 18th) and West Ham (36 pts, 17th) are separated by just 2 points, but the 12-match context window tells a stark story: Spurs are averaging 0.58 PPG over their last 12 matches. West Ham is averaging 1.58 PPG over the same stretch. The model projects Spurs to finish on ~36 points and West Ham on ~42 points, giving Spurs a **100% probability of finishing below West Ham** and a only 33.5% chance of reaching the traditional 38-point safety threshold.
+This is the most decisive result the model produces. Tottenham (34 pts, 18th) and West Ham (36 pts, 17th) are separated by just 2 points, but the 12-match context window tells a stark story: Spurs are averaging 0.58 PPG over their last 12 matches. West Ham is averaging 1.58 PPG over the same stretch. The model projects Spurs to finish on ~36 points and West Ham on ~42 points, giving Spurs a **100% probability of finishing below West Ham** and only a 33.5% chance of reaching the traditional 38-point safety threshold.
 
 ---
 
@@ -85,7 +85,7 @@ python src/relegation_forecast.py    # relegation deep-dive
 ## Next steps
 
 - Add fixture difficulty as a covariate (opponent current points as a proxy)
-- Update Chelsea data through MW34 and rerun the full snapshot
-- Track model accuracy week-over-week as the season concludes
+- Track model accuracy week-over-week as the season concludes (MW35–38)
+- Post-season accuracy audit: compare all three forecasts against final table
 
 *Data updated manually after each matchweek. All results sourced from FBref.*

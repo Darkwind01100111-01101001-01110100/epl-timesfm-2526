@@ -1,8 +1,8 @@
 """
 run_real_forecast.py
 ---------------------
-Loads real Chelsea 2025-26 Premier League match data (MW1-31),
-runs TimesFM 2.5 to forecast the remaining 7 matches (MW32-38),
+Loads real Chelsea 2025-26 Premier League match data (MW1-34),
+runs TimesFM 2.5 to forecast the remaining 4 matches (MW35-38),
 and produces two visualizations:
   1. Cumulative points trajectory with confidence bands
   2. Per-match points earned with rolling form line
@@ -53,7 +53,7 @@ model.compile(
 print("Model ready.")
 
 # ── 3. Forecast Cumulative Points ─────────────────────────────────────────────
-HORIZON = 7  # Remaining matchweeks (32-38)
+HORIZON = 4  # Remaining matchweeks (35-38)
 
 point_forecast, quantile_forecast = model.forecast(
     horizon=HORIZON,
@@ -64,7 +64,7 @@ mean_pts   = point_forecast[0]
 lower_pts  = quantile_forecast[0, :, 0]   # 10th percentile
 upper_pts  = quantile_forecast[0, :, -1]  # 90th percentile
 
-future_mw = list(range(32, 32 + HORIZON))
+future_mw = list(range(35, 35 + HORIZON))
 forecast_df = pd.DataFrame({
     'matchweek': future_mw,
     'forecast_mean': mean_pts,
@@ -72,7 +72,7 @@ forecast_df = pd.DataFrame({
     'forecast_upper_90': upper_pts,
 })
 forecast_df.to_csv('../outputs/real_points_forecast.csv', index=False)
-print(f"\nForecast (MW32-38):")
+print(f"\nForecast (MW35-38):")
 print(forecast_df.to_string(index=False))
 
 # ── 4. Visualization 1: Cumulative Points Trajectory ─────────────────────────
@@ -81,7 +81,7 @@ sns.set_style("whitegrid")
 
 # Historical
 ax.plot(df['matchweek'], df['cumulative_points'],
-        marker='o', color='#034694', linewidth=2.5, label='Actual Points (MW1-31)', zorder=3)
+        marker='o', color='#034694', linewidth=2.5, label='Actual Points (MW1-34)', zorder=3)
 
 # Connector
 ax.plot([df['matchweek'].iloc[-1], future_mw[0]],
@@ -111,7 +111,7 @@ ax.annotate(f'Projected end: ~{proj_pts} pts\n(range {int(lower_pts[-1])}–{int
             xytext=(future_mw[-1] - 8, mean_pts[-1] - 9),
             arrowprops=dict(arrowstyle='->', color='#FFA500'), fontsize=9, color='#8B6914')
 
-ax.set_title('Chelsea FC 2025-26 · Cumulative Points Trajectory\nTimesFM 2.5 Forecast · MW32–38', fontsize=14, pad=12)
+ax.set_title('Chelsea FC 2025-26 · Cumulative Points Trajectory\nTimesFM 2.5 Forecast · MW35–38', fontsize=14, pad=12)
 ax.set_xlabel('Matchweek', fontsize=11)
 ax.set_ylabel('Cumulative Points', fontsize=11)
 ax.set_xlim(0, 39)
@@ -119,7 +119,7 @@ ax.set_xticks(range(0, 40, 2))
 ax.legend(loc='upper left', fontsize=9)
 
 # Data note
-fig.text(0.99, 0.01, 'Data: FBref · Chelsea 2025-26 PL · MW1-31 · Apr 2026',
+fig.text(0.99, 0.01, 'Data: FBref · Chelsea 2025-26 PL · MW1-34 · May 2026',
          ha='right', va='bottom', fontsize=7, color='gray')
 
 plt.tight_layout()
@@ -160,7 +160,7 @@ ax2.set_xticklabels(
 )
 ax2.set_yticks([0, 1, 3])
 ax2.set_yticklabels(['0 (L)', '1 (D)', '3 (W)'])
-ax2.set_title('Chelsea FC 2025-26 · Per-Match Points & Rolling Form\nData: FBref · MW1-31 · Apr 2026', fontsize=13, pad=10)
+ax2.set_title('Chelsea FC 2025-26 · Per-Match Points & Rolling Form\nData: FBref · MW1-34 · May 2026', fontsize=13, pad=10)
 ax2.set_ylabel('Points Earned', fontsize=10)
 ax2.set_ylim(-0.2, 3.8)
 
