@@ -59,12 +59,13 @@ spu_df = pd.read_csv(os.path.join(DATA_DIR, 'tottenham_real_2025_26.csv'))
 whu_df = pd.read_csv(os.path.join(DATA_DIR, 'westham_real_2025_26.csv'))
 che_df = pd.read_csv(os.path.join(DATA_DIR, 'chelsea_real_2025_26.csv'))
 
-# Man City MW1-35: MW34 was a W, MW35 was D 3-3 vs Everton
+# Man City: 34 games played (1 game in hand vs Arsenal's 35).
+# MW35 Everton 3-3 City is NOT counted here — City have 4 games remaining.
 mci_raw = [
     'W','L','L','W','D','W','W','W','L','W',
     'W','L','W','W','W','W','W','W','D','D',
     'D','L','W','D','W','W','W','W','D','D',
-    'W','W','W','W','D'   # MW34=W, MW35=D (3-3 Everton)
+    'W','W','W','W'   # 34 results: MW1-34
 ]
 
 ars_s = [r2p(r) for r in ars_df['result']]
@@ -73,8 +74,8 @@ whu_s = [r2p(r) for r in whu_df['result']]
 che_s = [r2p(r) for r in che_df['result']]
 mci_s = [r2p(r) for r in mci_raw]
 
-ars_pts = sum(ars_s); ars_mw = len(ars_s)   # 76 pts, 35 played
-mci_pts = sum(mci_s); mci_mw = len(mci_s)   # 71 pts, 35 played
+ars_pts = sum(ars_s); ars_mw = len(ars_s)   # 76 pts, 35 played, 3 remaining
+mci_pts = sum(mci_s); mci_mw = len(mci_s)   # 73 pts, 34 played, 4 remaining
 spu_pts = sum(spu_s); spu_mw = len(spu_s)   # 37 pts, 35 played
 whu_pts = sum(whu_s); whu_mw = len(whu_s)   # 36 pts, 35 played
 che_pts = sum(che_s); che_mw = len(che_s)   # 49 pts, 35 played
@@ -115,7 +116,7 @@ print(f"  P(WHU safe ≥38):    {p_whu_safe:.1%}")
 
 # MW34 baseline for delta
 MW34 = {
-    'p_ars': 0.531, 'p_mci': 0.469,
+    'p_ars': 0.531, 'p_mci': 0.469,  # MW34 baseline (City had 1 game in hand)
     'p_spu_rel': 1.000, 'p_whu_rel': 0.000,
     'p_spu_safe': 0.335, 'p_whu_safe': 0.951,
 }
@@ -242,7 +243,8 @@ ax_ctx.set_ylabel('Win % (12-match context)', fontsize=9); ax_ctx.set_ylim(0, 0.
 ax_ctx.set_title('TimesFM Context Window\nWin % from Last 12 Matches', fontsize=10, fontweight='bold', color='white')
 ax_ctx.grid(True, axis='y', alpha=0.2)
 
-fig.suptitle(f'EPL 2025–26  ·  TimesFM-Informed Live Snapshot  ·  Data: MW35 (4 May 2026)',
+fig.suptitle(f'EPL 2025–26  ·  TimesFM-Informed Live Snapshot  ·  Data: MW35 (4 May 2026) · City 1 game in hand',
+
              fontsize=13, fontweight='bold', color='white', y=0.97)
 plt.savefig(os.path.join(OUTPUTS_DIR, 'live_snapshot.png'), dpi=150, bbox_inches='tight', facecolor=BG)
 plt.close()
@@ -275,7 +277,7 @@ ax_t.set_title('Title Race · What Changed After MW35?', fontsize=11, fontweight
 ax_t.legend(fontsize=9); ax_t.grid(True, axis='y', alpha=0.2)
 # Context note
 ax_t.text(0.5, -0.12,
-    f"Arsenal W 3-0 Fulham → {ars_pts} pts  |  Man City D 3-3 Everton → {mci_pts} pts  |  Gap: {ars_pts-mci_pts} pts, same games played",
+    f"Arsenal W 3-0 Fulham → {ars_pts} pts (35 played)  |  Man City → {mci_pts} pts (34 played, 1 game in hand)  |  City need {ars_pts - mci_pts + 1}+ pts from 4 games to overtake",
     transform=ax_t.transAxes, ha='center', fontsize=8.5, color='#AAAAAA')
 
 # Relegation delta
