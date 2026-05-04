@@ -1,0 +1,42 @@
+{
+  "as_of": "2026-05-04T21:10:41.851231",
+  "matchweek": 35,
+  "standings": {
+    "arsenal": {
+      "pts": 76,
+      "played": 35
+    },
+    "man_city": {
+      "pts": 74,
+      "played": 35
+    },
+    "tottenham": {
+      "pts": 37,
+      "played": 35
+    },
+    "west_ham": {
+      "pts": 36,
+      "played": 35
+    },
+    "chelsea": {
+      "pts": 48,
+      "played": 35
+    }
+  },
+  "forecasts": {
+    "p_arsenal_title": 0.9975,
+    "p_mancity_title": 0.0025,
+    "p_spurs_relegated": 0.4064,
+    "p_whu_relegated": 0.3344,
+    "p_spurs_safe": 0.83,
+    "p_whu_safe": 0.8152
+  },
+  "mw34_baseline": {
+    "p_ars": 0.531,
+    "p_mci": 0.469,
+    "p_spu_rel": 1.0,
+    "p_whu_rel": 0.0,
+    "p_spu_safe": 0.335,
+    "p_whu_safe": 0.951
+  }
+}
