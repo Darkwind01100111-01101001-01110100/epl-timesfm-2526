@@ -1,5 +1,5 @@
 {
-  "as_of": "2026-05-04T21:15:28.711914",
+  "as_of": "2026-05-05T04:07:03.939028",
   "matchweek": 35,
   "standings": {
     "arsenal": {
@@ -7,8 +7,8 @@
       "played": 35
     },
     "man_city": {
-      "pts": 73,
-      "played": 34
+      "pts": 74,
+      "played": 35
     },
     "tottenham": {
       "pts": 37,
@@ -24,8 +24,8 @@
     }
   },
   "forecasts": {
-    "p_arsenal_title": 0.5738,
-    "p_mancity_title": 0.4262,
+    "p_arsenal_title": 0.9975,
+    "p_mancity_title": 0.0025,
     "p_spurs_relegated": 0.4064,
     "p_whu_relegated": 0.3344,
     "p_spurs_safe": 0.83,
